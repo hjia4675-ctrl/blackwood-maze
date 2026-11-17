@@ -56,23 +56,95 @@ function marker(x,y,color,kind){const p=pos(x,y);let g=new THREE.Group();g.posit
 const shards=[marker(24,9,0xe0a54e,'stake'),marker(...firstLampCell,0x88aa78,'stake'),marker(8,24,0xb9c5a1,'stake')];const bell=marker(14,8,0xcdbb75,'bell');
 // Tall, softly glowing beacons make every objective visible through the trees.
 for(const o of [...shards,bell]){if(o===shards[1])continue;const beam=new THREE.Mesh(new THREE.CylinderGeometry(.08,.34,7,12,1,true),new THREE.MeshBasicMaterial({color:o.kind==='stake'?0xe0b65f:0xa6be91,transparent:true,opacity:.08,side:THREE.DoubleSide,depthWrite:false}));beam.position.set(o.x,3.5,o.z);scene.add(beam);const beacon=new THREE.PointLight(o.kind==='stake'?0xd9a94f:0x9fbd85,1.25,24,2);beacon.position.set(o.x,2.1,o.z);scene.add(beacon)}
-const isWeChatBrowser=/MicroMessenger/i.test(navigator.userAgent);const isTouchDevice=isWeChatBrowser||matchMedia('(pointer: coarse)').matches||matchMedia('(any-pointer: coarse)').matches||navigator.maxTouchPoints>0||('ontouchstart' in window);let keys={},yaw=spawnYaw,pitch=0,started=false,stamina=100,light=100,got=0,won=false,miniPassed=false,miniGameActive=false,guideClock=0,cheatGuide=false,routeClock=0,touchForward=0,touchRight=0,touchRun=false,stickPointer=null,lookPointer=null,lookX=0,lookY=0;if(isTouchDevice){document.body.classList.add('touch-device');document.getElementById('intro').innerHTML='左侧虚拟摇杆移动，右侧滑动观察。使用「交互」点亮路标，「路线」显示指引；按住「奔跑」加速。';document.querySelector('#menu .small').textContent='触控操作已就绪 · 横屏体验更舒适';}const cheatRoute=new THREE.Group();cheatRoute.visible=false;scene.add(cheatRoute);camera.position.set(origin+spawnCell.x*cell,1.65,origin+spawnCell.y*cell);let last=performance.now(),messageTimer=0;
-function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.opacity=1;messageTimer=2.4}function lock(){renderer.domElement.requestPointerLock?.()}function requestLandscape(){if(!isTouchDevice)return;const tryLock=()=>{try{const p=screen.orientation?.lock?.('landscape');p?.catch(()=>{})}catch(_){}};let full;try{full=document.documentElement.requestFullscreen?.()}catch(_){}tryLock();if(full&&typeof full.then==='function')full.then(tryLock).catch(()=>{})}document.getElementById('start').onclick=()=>{document.getElementById('menu').classList.add('hide');started=true;if(!isTouchDevice)lock();else{document.body.classList.add('playing');requestLandscape();resizeGame()}};document.addEventListener('pointerlockchange',()=>{if(!isTouchDevice&&document.pointerLockElement!==renderer.domElement&&started&&!won&&!miniGameActive){document.getElementById('menu').classList.remove('hide');document.getElementById('title').textContent='林雾之间';document.getElementById('intro').innerHTML='点击继续。<br>WASD移动 · 鼠标观察 · Shift奔跑 · E交互';document.getElementById('start').textContent='继续前行'}});document.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement){yaw-=e.movementX*.0022;pitch-=e.movementY*.0018;pitch=Math.max(-1.35,Math.min(1.35,pitch))}});addEventListener('keydown',e=>{if(miniGameActive){e.preventDefault();return}if(e.code==='KeyG'&&!keys.KeyG){cheatGuide=!cheatGuide;cheatRoute.visible=cheatGuide;routeClock=0;toast(cheatGuide?'路线指引已开启':'路线指引已关闭');if(cheatGuide)updateCheatRoute()}keys[e.code]=true;if(e.code==='KeyE')interact()});
+const isWeChatBrowser=/MicroMessenger/i.test(navigator.userAgent);const isTouchDevice=isWeChatBrowser||matchMedia('(pointer: coarse)').matches||matchMedia('(any-pointer: coarse)').matches||navigator.maxTouchPoints>0||('ontouchstart' in window);let keys={},yaw=spawnYaw,pitch=0,started=false,stamina=100,light=100,got=0,won=false,miniPassed=false,miniGameActive=false,guideClock=0,cheatGuide=false,routeClock=0,touchForward=0,touchRight=0,touchRun=false,stickPointer=null,lookPointer=null,lookX=0,lookY=0;if(isTouchDevice){document.body.classList.add('touch-device');document.getElementById('intro').innerHTML='左侧虚拟摇杆移动，右侧滑动观察。使用「交互」点亮路标，「路线」显示指引；按住「奔跑」加速。';document.querySelector('#menu .small').textContent='触控操作已就绪 · 横屏体验更舒适';}let cheatRouteTarget = null, cheatRouteStart = -1;
+const cheatRoute=new THREE.Group();cheatRoute.visible=false;scene.add(cheatRoute);camera.position.set(origin+spawnCell.x*cell,1.65,origin+spawnCell.y*cell);let last=performance.now(),messageTimer=0;
+function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.opacity=1;messageTimer=2.4}function lock(){renderer.domElement.requestPointerLock?.()}function requestLandscape(){if(!isTouchDevice)return;const tryLock=()=>{try{const p=screen.orientation?.lock?.('landscape');p?.catch(()=>{})}catch(_){}};let full;try{full=document.documentElement.requestFullscreen?.()}catch(_){}tryLock();if(full&&typeof full.then==='function')full.then(tryLock).catch(()=>{})}document.getElementById('start').onclick=()=>{document.getElementById('menu').classList.add('hide');started=true;if(!isTouchDevice)lock();else{document.body.classList.add('playing');requestLandscape();resizeGame()}};document.addEventListener('pointerlockchange',()=>{if(!isTouchDevice&&document.pointerLockElement!==renderer.domElement&&started&&!won&&!miniGameActive){document.getElementById('menu').classList.remove('hide');document.getElementById('title').textContent='林雾之间';document.getElementById('intro').innerHTML='点击继续。<br>WASD移动 · 鼠标观察 · Shift奔跑 · E交互';document.getElementById('start').textContent='继续前行'}});document.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement){yaw-=e.movementX*.0022;pitch-=e.movementY*.0018;pitch=Math.max(-1.35,Math.min(1.35,pitch))}});addEventListener('keydown',e=>{if(miniGameActive){e.preventDefault();return}if(e.code==='KeyG'&&!keys.KeyG){cheatGuide=!cheatGuide;cheatRoute.visible=cheatGuide;routeClock=0;cheatRouteTarget=null;cheatRouteStart=-1;toast(cheatGuide?'路线指引已开启':'路线指引已关闭');if(cheatGuide)updateCheatRoute()}keys[e.code]=true;if(e.code==='KeyE')interact()});
 addEventListener('keyup',e=>{keys[e.code]=false});const stick=document.getElementById('stickBase'),knob=document.getElementById('stickKnob'),lookPad=document.getElementById('lookPad');
 function moveStick(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,lim=r.width*.34;let dx=e.clientX-cx,dy=e.clientY-cy;let d=Math.hypot(dx,dy);if(d>lim){dx*=lim/d;dy*=lim/d}touchRight=dx/lim;touchForward=-dy/lim;knob.style.transform='translate('+dx+'px,'+dy+'px)'}
 function moveLook(x,y){let dx=x-lookTouchX,dy=y-lookTouchY;lookTouchX=x;lookTouchY=y;yaw-=dx*.007;pitch=Math.max(-1.35,Math.min(1.35,pitch-dy*.0048))}
 function touchById(list,id){if(id===null||id===undefined)return list.length?list[0]:null;for(let i=0;i<list.length;i++)if(list[i].identifier===id)return list[i];return null}
 if(isWeChatBrowser&&!window.PointerEvent){let stickTouchId=null,lookTouchId=null;document.addEventListener('touchstart',e=>{if(!started||miniGameActive)return;if(e.target.closest('.touchBtn,.guideClose,.quiz-option'))return;let handled=false;const startsOnStick=!!e.target.closest('#stickBase');for(let i=0;i<e.changedTouches.length;i++){const t=e.changedTouches[i],inside=el=>{const r=el.getBoundingClientRect();return t.clientX>=r.left&&t.clientX<=r.right&&t.clientY>=r.top&&t.clientY<=r.bottom};if(stickTouchId===null&&(startsOnStick||inside(stick))){stickTouchId=t.identifier;moveStick(t);handled=true}else if(lookTouchId===null&&inside(lookPad)){lookTouchId=t.identifier;lookTouchX=t.clientX;lookTouchY=t.clientY;handled=true}}},{capture:true,passive:true});document.addEventListener('touchmove',e=>{let handled=false;if(stickTouchId!==null){const t=touchById(e.changedTouches,stickTouchId)||touchById(e.touches,stickTouchId);if(t){moveStick(t);handled=true}}if(lookTouchId!==null){const t=touchById(e.changedTouches,lookTouchId)||touchById(e.touches,lookTouchId);if(t){moveLook(t.clientX,t.clientY);handled=true}}if(handled)e.preventDefault()},{capture:true,passive:false});function releaseTouches(e){for(let i=0;i<e.changedTouches.length;i++){const id=e.changedTouches[i].identifier;if(id===stickTouchId){stickTouchId=null;touchForward=touchRight=0;knob.style.transform='translate(0,0)'}if(id===lookTouchId)lookTouchId=null}}document.addEventListener('touchend',releaseTouches,{passive:false});document.addEventListener('touchcancel',releaseTouches,{passive:false})}else{stick.addEventListener('pointerdown',e=>{if(!started||miniGameActive)return;e.preventDefault();stickPointer=e.pointerId;try{stick.setPointerCapture(e.pointerId)}catch(_){}moveStick(e)});stick.addEventListener('pointermove',e=>{if(e.pointerId===stickPointer)moveStick(e)});function releaseStick(e){if(e.pointerId!==stickPointer)return;stickPointer=null;touchForward=touchRight=0;knob.style.transform='translate(0,0)'}stick.addEventListener('pointerup',releaseStick);stick.addEventListener('pointercancel',releaseStick);lookPad.addEventListener('pointerdown',e=>{if(!started||miniGameActive)return;e.preventDefault();lookPointer=e.pointerId;lookX=e.clientX;lookY=e.clientY;try{lookPad.setPointerCapture(e.pointerId)}catch(_){}});lookPad.addEventListener('pointermove',e=>{if(e.pointerId!==lookPointer)return;const dx=e.clientX-lookX,dy=e.clientY-lookY;lookX=e.clientX;lookY=e.clientY;let tx=dx,ty=dy;yaw-=tx*.007;pitch=Math.max(-1.35,Math.min(1.35,pitch-ty*.0048))});function releaseLook(e){if(e.pointerId===lookPointer)lookPointer=null}lookPad.addEventListener('pointerup',releaseLook);lookPad.addEventListener('pointercancel',releaseLook)}
 document.getElementById('touchInteract').addEventListener('pointerdown',e=>{e.preventDefault();if(started&&!miniGameActive)interact()});
-document.getElementById('touchGuide').addEventListener('pointerdown',e=>{e.preventDefault();if(started&&!miniGameActive){cheatGuide=!cheatGuide;cheatRoute.visible=cheatGuide;routeClock=0;toast(cheatGuide?'路线指引已开启':'路线指引已关闭');if(cheatGuide)updateCheatRoute()}});
+document.getElementById('touchGuide').addEventListener('pointerdown',e=>{e.preventDefault();if(started&&!miniGameActive){cheatGuide=!cheatGuide;cheatRoute.visible=cheatGuide;routeClock=0;cheatRouteTarget=null;cheatRouteStart=-1;toast(cheatGuide?'路线指引已开启':'路线指引已关闭');if(cheatGuide)updateCheatRoute()}});
 document.getElementById('touchRun').addEventListener('pointerdown',e=>{e.preventDefault();touchRun=true});
 ['pointerup','pointercancel','lostpointercapture'].forEach(t=>document.getElementById('touchRun').addEventListener(t,()=>touchRun=false));
 document.getElementById('touchPause').addEventListener('pointerdown',e=>{e.preventDefault();if(started&&!miniGameActive){started=false;document.body.classList.remove('playing');document.exitFullscreen?.();screen.orientation?.unlock?.();document.getElementById('menu').classList.remove('hide');document.getElementById('title').textContent='林雾之间';document.getElementById('intro').innerHTML='左侧虚拟摇杆移动，右侧滑动观察。使用「交互」点亮路标，「路线」显示指引；按住「奔跑」加速。';document.getElementById('start').textContent='继续前行'}});
 const guidePanel=document.querySelector('.guide');document.getElementById('guideToggle').addEventListener('pointerdown',e=>{e.preventDefault();guidePanel.classList.add('show');document.body.classList.add('help-open')});function closeHelp(){guidePanel.classList.remove('show');document.body.classList.remove('help-open')}document.getElementById('guideClose').addEventListener('pointerdown',e=>{e.preventDefault();closeHelp()});document.getElementById('helpBackdrop').addEventListener('pointerdown',closeHelp);function resizeGame(){const vw=Math.max(1,window.innerWidth||document.documentElement.clientWidth),vh=Math.max(1,window.innerHeight||document.documentElement.clientHeight);renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,isTouchDevice?1:2));camera.aspect=vw/vh;camera.updateProjectionMatrix();renderer.setSize(vw,vh)}function scheduleResize(){requestAnimationFrame(()=>{resizeGame();setTimeout(resizeGame,120);setTimeout(resizeGame,420)})}addEventListener('resize',scheduleResize,{passive:true});addEventListener('orientationchange',scheduleResize,{passive:true});window.visualViewport?.addEventListener('resize',scheduleResize,{passive:true});document.addEventListener('fullscreenchange',scheduleResize);screen.orientation?.addEventListener?.('change',scheduleResize);scheduleResize();
-function interact(){if(!started||won||miniGameActive)return;let near=[...shards,bell].find(o=>!o.got&&Math.hypot(camera.position.x-o.x,camera.position.z-o.z)<2.8);if(!near){toast('靠近路标或旧钟按 E');return}if(near.kind==='stake'){near.got=true;got++;scene.remove(near.group);toast('旧路标点亮 '+got+' / 3');document.getElementById('goal').textContent=got===3?'路标齐了：前往东北旧钟':'点亮林间路标 '+got+'/3'}else if(near===bell){if(got<3)toast('旧钟沉寂：还需点亮 '+(3-got)+' 座路标');else startMiniGame()}}
+function interact(){if(!started||won||miniGameActive)return;let near=[...shards,bell].find(o=>!o.got&&Math.hypot(camera.position.x-o.x,camera.position.z-o.z)<2.8);if(!near){toast('靠近路标或旧钟按 E');return}if(near.kind==='stake'){near.got=true;got++;scene.remove(near.group);toast('旧路标点亮 '+got+' / 3');if(cheatGuide)updateCheatRoute();document.getElementById('goal').textContent=got===3?'路标齐了：前往东北旧钟':'点亮林间路标 '+got+'/3'}else if(near===bell){if(got<3)toast('旧钟沉寂：还需点亮 '+(3-got)+' 座路标');else startMiniGame()}}
 function end(win){document.body.classList.remove('playing');document.exitPointerLock?.();let m=document.getElementById('menu');m.classList.remove('hide');document.getElementById('title').textContent=win?'你走出了黑木林':'林子留下了你';document.getElementById('intro').innerHTML=win?'三座路标重新点亮了回家的猎径，晨光照进黑木林。<br>你独自走出了黑木林。':'三座林间路标重新连成了回家的路。' ;document.getElementById('start').textContent='再次进入';document.getElementById('start').onclick=()=>location.reload();if(win){m.classList.add('win-screen');for(let i=0;i<38;i++){let p=document.createElement('i');p.className='victory-petal';p.style.setProperty('--x',gameRandom()*100+'vw');p.style.setProperty('--dur',(5+gameRandom()*6)+'s');p.style.setProperty('--delay',(-gameRandom()*9)+'s');p.style.setProperty('--drift',(gameRandom()*160-80)+'px');m.appendChild(p)}for(let i=0;i<24;i++){let s=document.createElement('i');s.className='win-spark';s.style.setProperty('--x',gameRandom()*100+'vw');s.style.setProperty('--y',gameRandom()*100+'vh');s.style.setProperty('--delay',gameRandom()*2+'s');m.appendChild(s)}}}
 const miniPanel=document.getElementById('miniPanel'),miniStatus=document.getElementById('miniStatus');document.querySelectorAll('.quiz-option').forEach(btn=>btn.addEventListener('click',()=>{if(!miniGameActive)return;if(btn.dataset.answer==='c'){miniGameActive=false;miniPassed=true;miniPanel.classList.remove('show');miniStatus.textContent='回答正确！';end(true)}else{miniStatus.textContent='答案不对，再想一想。';btn.classList.add('wrong');setTimeout(()=>btn.classList.remove('wrong'),650)}}));function startMiniGame(){miniGameActive=true;miniPanel.classList.add('show');miniStatus.textContent='选出正确答案，答对后即可通关。';document.exitPointerLock?.()}
-function updateCheatRoute(){while(cheatRoute.children.length){let o=cheatRoute.children.pop();o.geometry?.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material?.dispose()}let targets=got<3?shards.filter(o=>!o.got):[bell];if(!targets.length)return;let target=targets.reduce((a,b)=>Math.hypot(camera.position.x-a.x,camera.position.z-a.z)<Math.hypot(camera.position.x-b.x,camera.position.z-b.z)?a:b),sx=Math.round((camera.position.x-origin)/cell),sy=Math.round((camera.position.z-origin)/cell),tx=Math.round((target.x-origin)/cell),ty=Math.round((target.z-origin)/cell),queue=[[sx,sy]],prev=new Map([[`${sx},${sy}`,null]]),dirs=[[1,0],[-1,0],[0,1],[0,-1]];while(queue.length){let [x,y]=queue.shift();if(x===tx&&y===ty)break;for(const [dx,dy] of dirs){let nx=x+dx,ny=y+dy,key=`${nx},${ny}`;if(nx>=0&&ny>=0&&nx<mazeN&&ny<mazeN&&!grid[ny][nx]&&!prev.has(key)){prev.set(key,`${x},${y}`);queue.push([nx,ny])}}}let key=`${tx},${ty}`;if(!prev.has(key))return;let path=[];while(key){let [x,y]=key.split(',').map(Number);path.push(new THREE.Vector3(origin+x*cell,.08,origin+y*cell));key=prev.get(key)}path.reverse();let line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(path),new THREE.LineBasicMaterial({color:0xffd56c,transparent:true,opacity:.95,depthTest:false}));line.renderOrder=20;cheatRoute.add(line);for(let i=1;i<path.length;i+=2){let dot=new THREE.Mesh(new THREE.SphereGeometry(.19,8,6),new THREE.MeshBasicMaterial({color:0xffd56c,depthTest:false}));dot.position.copy(path[i]);dot.position.y=.18;dot.renderOrder=21;cheatRoute.add(dot)}}
+function updateCheatRoute() {
+  const targets = got < 3 ? shards.filter(lamp => !lamp.got) : [bell];
+  const cellX = Math.round((camera.position.x - origin) / cell);
+  const cellY = Math.round((camera.position.z - origin) / cell);
+  if (cellX < 0 || cellY < 0 || cellX >= mazeN || cellY >= mazeN || grid[cellY][cellX]) return;
+
+  const start = cellY * mazeN + cellX;
+  if (start === cheatRouteStart && targets.includes(cheatRouteTarget)) return;
+
+  const previous = new Int32Array(mazeN * mazeN).fill(-1);
+  const queue = [start];
+  previous[start] = start;
+  for (let i = 0; i < queue.length; i++) {
+    const key = queue[i];
+    const x = key % mazeN, y = Math.floor(key / mazeN);
+    for (const [dx, dy] of spawnDirs) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= mazeN || ny >= mazeN || grid[ny][nx]) continue;
+      const next = ny * mazeN + nx;
+      if (previous[next] !== -1) continue;
+      previous[next] = key;
+      queue.push(next);
+    }
+  }
+
+  const reachable = targets.map(target => {
+    const tx = Math.round((target.x - origin) / cell);
+    const ty = Math.round((target.z - origin) / cell);
+    return {target, key: ty * mazeN + tx, distance: Math.hypot(target.x - camera.position.x, target.z - camera.position.z)};
+  }).filter(entry => previous[entry.key] >= 0);
+  const destination = reachable.find(entry => entry.target === cheatRouteTarget)
+    ?? reachable.sort((a, b) => a.distance - b.distance)[0];
+  if (!destination) return;
+
+  const path = [];
+  for (let key = destination.key;; key = previous[key]) {
+    path.push(new THREE.Vector3(origin + key % mazeN * cell, .08, origin + Math.floor(key / mazeN) * cell));
+    if (key === start) break;
+  }
+  path.reverse();
+
+  while (cheatRoute.children.length) {
+    const object = cheatRoute.children[0];
+    cheatRoute.remove(object);
+    object.geometry.dispose();
+    object.material.dispose();
+  }
+
+  if (path.length > 1) {
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(path),
+      new THREE.LineBasicMaterial({color: 0xffd56c, depthTest: false}));
+    line.renderOrder = 20;
+    cheatRoute.add(line);
+    for (let i = 1; i < path.length - 1; i++) {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(.19, 8, 6),
+        new THREE.MeshBasicMaterial({color: 0xffd56c, depthTest: false}));
+      dot.position.copy(path[i]);
+      dot.position.y = .18;
+      dot.renderOrder = 21;
+      cheatRoute.add(dot);
+    }
+  }
+
+  // Mark the destination even when the player and target share a cell.
+  const marker = new THREE.Mesh(new THREE.OctahedronGeometry(.27),
+    new THREE.MeshBasicMaterial({color: 0xffe097, depthTest: false}));
+  marker.position.set(destination.target.x, 2.2, destination.target.z);
+  marker.renderOrder = 22;
+  cheatRoute.add(marker);
+  cheatRouteTarget = destination.target;
+  cheatRouteStart = start;
+}
 function blocked(x,z){let gx=Math.round((x-origin)/cell),gy=Math.round((z-origin)/cell);if(gx<0||gy<0||gx>=mazeN||gy>=mazeN||grid[gy][gx])return true;for(let o of scene.children){if(o.userData.tree){}}return false}
 // collision against maze walls and tree trunks
 function canMove(x,z){if(blocked(x,z))return false;for(let y=0;y<mazeN;y++)for(let xx=0;xx<mazeN;xx++)if(grid[y][xx]){let wx=origin+xx*cell,wz=origin+y*cell;if(Math.abs(wx-x)<1.38&&Math.abs(wz-z)<1.38)return false}for(const t of trees){if(Math.hypot(x-t.x,z-t.z)<.68)return false}return true}
