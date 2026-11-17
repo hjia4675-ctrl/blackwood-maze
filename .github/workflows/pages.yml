@@ -1,3 +1,4 @@
+# Set the repository Pages source to GitHub Actions in Settings > Pages.
 name: Publish game to GitHub Pages
 on:
   push:
