@@ -20,7 +20,15 @@ const grid=Array.from({length:mazeN},()=>Array(mazeN).fill(1));function carve(x,
 // extra loops keep navigation readable while preserving a demanding route
 for(let k=0;k<260;k++){let x=1+Math.floor(gameRandom()*(mazeN-2)),y=1+Math.floor(gameRandom()*(mazeN-2));if(grid[y][x]&&gameRandom()<.45)grid[y][x]=0}
 // Restore selected walls to force a winding route between the first two lamps without lengthening the first route from spawn.
-const windingWalls=[[22,11],[19,12],[11,14],[12,25],[12,9],[12,14],[5,16],[7,16],[18,8],[25,4],[24,20]];for(const [x,y] of windingWalls)grid[y][x]=1
+const windingWalls = [
+  [22,11], [19,12], [11,14], [12,25], [12,9], [12,14],
+  [5,16], [7,16], [18,8], [25,4], [24,20],
+  [12,11], [16,7], [23,7], [9,15]
+];
+for (const [x, y] of windingWalls) grid[y][x] = 1;
+
+const sidePassages = [[13,12], [10,6], [14,10]];
+for (const [x, y] of sidePassages) grid[y][x] = 0;
 // Guarantee each rune has a walkable clearing instead of occasionally spawning inside a wall.
 const runeCells=[[23,4],[4,2],[24,15]];for(const [rx,ry] of [...runeCells,[14,8]]){for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){let ax=rx+ox,ay=ry+oy;if(ax>0&&ay>0&&ax<mazeN-1&&ay<mazeN-1)grid[ay][ax]=0}}const spawnDirs=[[1,0],[-1,0],[0,1],[0,-1]],lampDistanceMaps=runeCells.map(([sx,sy])=>{const dist=Array.from({length:mazeN},()=>Array(mazeN).fill(-1)),q=[[sx,sy]];dist[sy][sx]=0;for(let qi=0;qi<q.length;qi++){const [x,y]=q[qi];for(const [dx,dy] of spawnDirs){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<mazeN&&ny<mazeN&&!grid[ny][nx]&&dist[ny][nx]<0){dist[ny][nx]=dist[y][x]+1;q.push([nx,ny])}}}return dist});const spawnCell={x:9,y:9},spawnDistances=lampDistanceMaps.map(d=>d[spawnCell.y][spawnCell.x]),spawnEuclidean=runeCells.map(([x,y])=>Math.hypot(x-spawnCell.x,y-spawnCell.y)),nearestLampIndex=spawnEuclidean.indexOf(Math.min(...spawnEuclidean)),spawnExits=spawnDirs.map(([dx,dy])=>({x:spawnCell.x+dx,y:spawnCell.y+dy})).filter(p=>p.x>=0&&p.y>=0&&p.x<mazeN&&p.y<mazeN&&!grid[p.y][p.x]),spawnNext=spawnExits.reduce((best,p)=>lampDistanceMaps[nearestLampIndex][p.y][p.x]<lampDistanceMaps[nearestLampIndex][best.y][best.x]?p:best,spawnExits[0]||spawnCell),spawnYaw=Math.atan2(-(spawnNext.x-spawnCell.x),-(spawnNext.y-spawnCell.y));
 const origin=-(mazeN*cell)/2;const pos=(x,y)=>new THREE.Vector3(origin+x*cell,0,origin+y*cell);const floor=new THREE.Mesh(new THREE.PlaneGeometry(mazeN*cell,mazeN*cell),floorMat);floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;scene.add(floor);
