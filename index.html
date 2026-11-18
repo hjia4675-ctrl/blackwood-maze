@@ -107,14 +107,100 @@ function castleStoneTexture(isFloor) {
   return texture;
 }
 
-const wallTex = castleStoneTexture(false);
+function castleWallMaps() {
+  const size = 1024;
+  const paintCanvas = document.createElement('canvas');
+  const reliefCanvas = document.createElement('canvas');
+  paintCanvas.width = paintCanvas.height = reliefCanvas.width = reliefCanvas.height = size;
+  const paintContext = paintCanvas.getContext('2d');
+  const reliefContext = reliefCanvas.getContext('2d');
+  const paint = paintContext.createImageData(size, size);
+  const relief = reliefContext.createImageData(size, size);
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const smooth = t => t * t * (3 - 2 * t);
+  const mix = (a, b, t) => a + (b - a) * t;
+  function hash(x, y, salt) {
+    let h = Math.imul(x + 73, 0x1f123bb5) ^ Math.imul(y + 117, 0x5f356495) ^ salt;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+  function noiseField(resolution, salt) {
+    const samples = new Float32Array(resolution * resolution);
+    for (let y = 0; y < resolution; y++) {
+      for (let x = 0; x < resolution; x++) samples[y * resolution + x] = hash(x, y, salt);
+    }
+    const scale = resolution / size;
+    return (x, y) => {
+      const u = x * scale, v = y * scale;
+      const x0 = Math.floor(u), y0 = Math.floor(v);
+      const fx = smooth(u - x0), fy = smooth(v - y0);
+      const a = (y0 % resolution) * resolution, b = ((y0 + 1) % resolution) * resolution;
+      const c = x0 % resolution, d = (x0 + 1) % resolution;
+      return mix(mix(samples[a + c], samples[a + d], fx), mix(samples[b + c], samples[b + d], fx), fy);
+    };
+  }
+
+  const erosion = noiseField(30, 6125);
+  const mineral = noiseField(12, 8143);
+  const grain = noiseField(89, 63821);
+  const pits = noiseField(219, 1937);
+  const rows = 14, columns = 4, stoneWidth = size / columns, stoneHeight = size / rows;
+  const stones = Array.from({length: rows}, (_, row) =>
+    Array.from({length: columns}, (_, col) => ({
+      tone: hash(col, row, 9701) * 23 - 11.5,
+      warmth: hash(col, row, 8763) * 8 - 4,
+      seam: hash(col, row, 5412) * 2.5 + 3
+    })));
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const worn = erosion(x, y), tones = mineral(x, y), small = grain(x, y), pore = pits(x, y);
+      const shiftedY = y + (worn - .5) * 5 + size;
+      const row = Math.floor(shiftedY / stoneHeight) % rows;
+      const offset = row % 2 ? stoneWidth / 2 : 0;
+      const shiftedX = x + offset + (small - .5) * 4 + size;
+      const column = Math.floor(shiftedX / stoneWidth) % columns;
+      const stone = stones[row][column];
+      const u = shiftedX % stoneWidth, v = shiftedY % stoneHeight;
+      const chip = Math.max(0, .36 - worn) * 13;
+      const edge = Math.min(u, stoneWidth - u, v, stoneHeight - v) - stone.seam - chip;
+      const coverage = smooth(clamp((edge + 1.8) / 3.6, 0, 1));
+      const bevel = smooth(clamp(edge / 6, 0, 1));
+      const pitting = Math.max(0, .34 - pore) * 33;
+      const layers = Math.sin((v * .49 + worn * 7 + small * 1.5)) * (tones - .32) * 5;
+      const dust = (small - .5) * 18 + (pore - .5) * 13;
+      const face = 113 + stone.tone + (tones - .5) * 27 + (worn - .5) * 23 + dust + layers - pitting;
+      const mortar = 56 + (tones - .5) * 16 + dust * .7;
+      const shade = mix(mortar, face - (1 - bevel) * 17, coverage);
+      const height = mix(37 + small * 19, 124 + bevel * 85 + (small - .5) * 18 - pitting * 1.9, coverage);
+      const i = (y * size + x) * 4;
+      paint.data[i] = shade + 5 + stone.warmth * coverage;
+      paint.data[i + 1] = shade;
+      paint.data[i + 2] = shade - 5 - stone.warmth * .6 * coverage;
+      paint.data[i + 3] = 255;
+      relief.data[i] = relief.data[i + 1] = relief.data[i + 2] = height;
+      relief.data[i + 3] = 255;
+    }
+  }
+  paintContext.putImageData(paint, 0, 0);
+  reliefContext.putImageData(relief, 0, 0);
+  const map = new THREE.CanvasTexture(paintCanvas);
+  const bumpMap = new THREE.CanvasTexture(reliefCanvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  for (const texture of [map, bumpMap]) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  }
+  return {map, bumpMap};
+}
+
+const {map: wallTex, bumpMap: wallRelief} = castleWallMaps();
 const floorTex = castleStoneTexture(true);
 floorTex.repeat.set(mazeN / 1.35, mazeN / 1.35);
 const floorMat = new THREE.MeshStandardMaterial({
   color: 0xe2d8d4, map: floorTex, bumpMap: floorTex, bumpScale: .04, roughness: .52
 });
 const wallMat = new THREE.MeshStandardMaterial({
-  color: 0xe5d6cc, map: wallTex, bumpMap: wallTex, bumpScale: .075, roughness: .9
+  color: 0xf5eee8, map: wallTex, bumpMap: wallRelief, bumpScale: .083, roughness: .88
 });
 const grid=Array.from({length:mazeN},()=>Array(mazeN).fill(1));function carve(x,y){grid[y][x]=0;let ds=[[0,-2],[2,0],[0,2],[-2,0]];for(let i=ds.length-1;i>0;i--){let j=Math.floor(gameRandom()*(i+1));[ds[i],ds[j]]=[ds[j],ds[i]]}for(const [dx,dy]of ds){let nx=x+dx,ny=y+dy;if(nx>0&&ny>0&&nx<mazeN-1&&ny<mazeN-1&&grid[ny][nx]){grid[y+dy/2][x+dx/2]=0;carve(nx,ny)}}}carve(1,1);grid[1][1]=0;grid[mazeN-2][mazeN-2]=0;
 // extra loops keep navigation readable while preserving a demanding route
@@ -195,7 +281,7 @@ function addCastleRunner() {
   scene.add(runner);
 }
 addCastleRunner();
-const wallHeight=6.2,wallGeo=new THREE.BoxGeometry(cell,wallHeight,cell),supportGeo=new THREE.BoxGeometry(.24,wallHeight,.3),supportMat=new THREE.MeshStandardMaterial({color:0x9a8074,map:wallTex,roughness:.88}),supports=[];for(let y=0;y<mazeN;y++)for(let x=0;x<mazeN;x++)if(grid[y][x]){let wx=origin+x*cell,wz=origin+y*cell,m=new THREE.Mesh(wallGeo,wallMat);m.position.set(wx,wallHeight/2-.12,wz);m.receiveShadow=true;m.castShadow=true;scene.add(m);let cap=new THREE.Mesh(new THREE.BoxGeometry(cell+.08,.24,cell+.08),supportMat);cap.position.set(wx,wallHeight-.12,wz);cap.castShadow=true;scene.add(cap);for(let side of [-1,1]){let post=new THREE.Mesh(supportGeo,supportMat);post.position.set(wx,wallHeight/2-.12,wz+side*(cell/2-.13));post.castShadow=true;post.receiveShadow=true;scene.add(post)}}
+const wallHeight=6.2,wallGeo=new THREE.BoxGeometry(cell,wallHeight,cell),supportGeo=new THREE.BoxGeometry(.24,wallHeight,.3),supportMat=new THREE.MeshStandardMaterial({color:0xd2c4bb,map:wallTex,bumpMap:wallRelief,bumpScale:.06,roughness:.9}),supports=[];for(let y=0;y<mazeN;y++)for(let x=0;x<mazeN;x++)if(grid[y][x]){let wx=origin+x*cell,wz=origin+y*cell,m=new THREE.Mesh(wallGeo,wallMat);m.position.set(wx,wallHeight/2-.12,wz);m.receiveShadow=true;m.castShadow=true;scene.add(m);let cap=new THREE.Mesh(new THREE.BoxGeometry(cell+.08,.24,cell+.08),supportMat);cap.position.set(wx,wallHeight-.12,wz);cap.castShadow=true;scene.add(cap);for(let side of [-1,1]){let post=new THREE.Mesh(supportGeo,supportMat);post.position.set(wx,wallHeight/2-.12,wz+side*(cell/2-.13));post.castShadow=true;post.receiveShadow=true;scene.add(post)}}
 // trees along maze edges and in broad clearings
 const posterImagePaths=Array.from({length:14},(_,i)=>'./assets/nailong-'+String(i+1).padStart(2,'0')+'.jpg');const posterLoader=new THREE.TextureLoader(),posterTextures=posterImagePaths.map(path=>{const texture=posterLoader.load(path);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return texture});function posterShuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(gameRandom()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}const posterCopies=6,posterReserved=[[spawnCell.x,spawnCell.y],...mazeClearings],posterCandidates=[];for(let y=1;y<mazeN-1;y++)for(let x=1;x<mazeN-1;x++)if(grid[y][x]&&!posterReserved.some(([rx,ry])=>Math.hypot(x-rx,y-ry)<2.4)){const sides=[-1,1].filter(dx=>grid[y][x+dx]===0);if(sides.length)posterCandidates.push({x,y,dx:sides[(gameRandom()*sides.length)|0]})}const posterSites=[],posterUsed=new Set(),posterByImage=Array.from({length:posterTextures.length},()=>[]),posterMinDistance=(site,list)=>list.length?Math.sqrt(Math.min(...list.map(p=>(site.x-p.x)**2+(site.y-p.y)**2))):Infinity;for(let copy=0;copy<posterCopies;copy++)for(const imageIndex of posterShuffle(Array.from({length:posterTextures.length},(_,i)=>i))){let options=posterCandidates.filter(p=>!posterUsed.has(p.x+','+p.y));if(!options.length)break;const same=posterByImage[imageIndex],spaced=options.filter(p=>posterMinDistance(p,same)>=6),fallback=options.filter(p=>posterMinDistance(p,same)>=4);if(spaced.length)options=spaced;else if(fallback.length)options=fallback;const separated=options.filter(p=>posterSites.every(q=>Math.max(Math.abs(p.x-q.x),Math.abs(p.y-q.y))>=2));if(separated.length)options=separated;const globallySpaced=options.filter(p=>posterMinDistance(p,posterSites)>=2.4);if(globallySpaced.length)options=globallySpaced;let bestScore=-Infinity,best=[];for(const p of options){const score=posterMinDistance(p,posterSites)+posterMinDistance(p,same)*.24;if(score>bestScore+.001){bestScore=score;best=[p]}else if(Math.abs(score-bestScore)<.001)best.push(p)}const site=best[(gameRandom()*Math.min(5,best.length))|0];posterUsed.add(site.x+','+site.y);site.imageIndex=imageIndex;posterSites.push(site);same.push(site)}const posterClearances=posterSites.map(site=>({x:origin+site.x*cell+site.dx*(cell/2+.04),z:origin+site.y*cell,dx:site.dx}));for(const site of posterSites){const image=posterTextures[site.imageIndex],faceX=origin+site.x*cell+site.dx*(cell/2+.035),faceZ=origin+site.y*cell,photo=new THREE.Mesh(new THREE.PlaneGeometry(cell*.86,wallHeight*.84),new THREE.MeshStandardMaterial({map:image,emissive:0x302619,emissiveMap:image,emissiveIntensity:.26,roughness:.96,side:THREE.DoubleSide}));photo.position.set(faceX,wallHeight/2-.12,faceZ);photo.rotation.y=site.dx>0?Math.PI/2:-Math.PI/2;scene.add(photo)}
 // Retain the old vegetation random draws so existing stones, puddles and other details keep their layout.
@@ -204,7 +290,16 @@ function advanceSceneryRandom(draws) {
 }
 for(let y=0;y<mazeN;y++)for(let x=0;x<mazeN;x++){if(!grid[y][x]&&gameRandom()<.38&&Math.hypot(x-spawnCell.x,y-spawnCell.y)>2.2&&!(x<4&&y<4)&&!(x>mazeN-5&&y>mazeN-5)&&!mazeClearings.some(([rx,ry])=>Math.hypot(x-rx,y-ry)<2.2)&&Math.hypot(x-14,y-8)>2.2){let tx=origin+x*cell+(gameRandom()-.5)*.6,tz=origin+y*cell+(gameRandom()-.5)*.6,blocked=posterClearances.some(p=>{const forward=(tx-p.x)*p.dx;return forward>-.2&&forward<9.5&&Math.abs(tz-p.z)<3.1});if(!blocked){advanceSceneryRandom(71);}}}
 advanceSceneryRandom(96 * 4);
-const rockMat=new THREE.MeshStandardMaterial({color:0x454536,roughness:1}),puddleMat=new THREE.MeshStandardMaterial({color:0x26392e,roughness:.19,metalness:.12});for(let i=0;i<1650;i++){let x=origin+gameRandom()*mazeN*cell,z=origin+gameRandom()*mazeN*cell,gx=Math.round((x-origin)/cell),gy=Math.round((z-origin)/cell);if(grid[gy]?.[gx])continue;advanceSceneryRandom(7 * 5);if(i%6===0){let rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.22+gameRandom()*.2,0),rockMat);rock.position.set(x,.06,z);rock.scale.y=.55;rock.rotation.set(gameRandom(),gameRandom(),gameRandom());scene.add(rock)}if(i%23===0){let water=new THREE.Mesh(new THREE.CircleGeometry(.55+gameRandom()*.8,16),puddleMat);water.rotation.x=-Math.PI/2;water.position.set(x,-.055,z);water.scale.y=.5;scene.add(water)}}// Hanging mist banks sit low between the trunks; layered translucent cones suggest broken moon shafts.
+// Advance the original clutter draws to preserve the rest of the scene.
+for (let i = 0; i < 1650; i++) {
+  const x = origin + gameRandom() * mazeN * cell;
+  const z = origin + gameRandom() * mazeN * cell;
+  const gx = Math.round((x - origin) / cell);
+  const gy = Math.round((z - origin) / cell);
+  if (grid[gy]?.[gx]) continue;
+  advanceSceneryRandom(7 * 5 + (i % 6 === 0 ? 4 : 0) + (i % 23 === 0 ? 1 : 0));
+}
+// Hanging mist banks sit low between the trunks; layered translucent cones suggest broken moon shafts.
 // Fog remains in the world atmosphere; local transparent fog volumes were removed
 // because their layered edges created pale halos around nearby silhouettes.
 // landmarks and collectibles
