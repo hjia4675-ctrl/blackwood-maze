@@ -50,8 +50,72 @@ const ambient=new THREE.HemisphereLight(0x64745c,0x211e17,1.05);scene.add(ambien
 const flame=new THREE.PointLight(0xffae55,2.2,10,2);camera.add(flame);flame.position.set(.35,-.35,-.55);scene.add(camera);
 function noiseTexture(base,streak=false){const n=1024,c=document.createElement('canvas');c.width=c.height=n;const x=c.getContext('2d');x.fillStyle=base;x.fillRect(0,0,n,n);for(let i=0;i<36000;i++){let v=gameRandom()*100|0;x.fillStyle=`rgba(${v},${v},${v},${gameRandom()*.2})`;let px=gameRandom()*n,py=gameRandom()*n;x.fillRect(px,py,streak?1+gameRandom()*8:1+gameRandom()*4,streak?8+gameRandom()*80:1+gameRandom()*4)}if(streak)for(let i=0;i<150;i++){x.strokeStyle=`rgba(15,10,6,${gameRandom()*.5})`;x.lineWidth=1+gameRandom()*4;x.beginPath();let px=gameRandom()*n;x.moveTo(px,0);x.bezierCurveTo(px-35,360,px+35,650,px+(gameRandom()-.5)*36,n);x.stroke()}const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t}
 function wallTexture(){const n=1024,c=document.createElement('canvas');c.width=c.height=n;const g=c.getContext('2d');g.fillStyle='#332d22';g.fillRect(0,0,n,n);for(let y=0;y<n;y+=80){let hue=22+gameRandom()*8;g.fillStyle=`hsl(${hue},18%,${15+gameRandom()*9}%)`;g.fillRect(0,y,n,75);g.fillStyle='rgba(8,8,5,.78)';g.fillRect(0,y+74,n,6);for(let x=10;x<n;x+=92+gameRandom()*35){g.strokeStyle='rgba(10,8,5,.4)';g.lineWidth=1+gameRandom()*4;g.beginPath();g.moveTo(x,y+4);g.bezierCurveTo(x-12,y+24,x+9,y+48,x,y+72);g.stroke()}for(let i=0;i<1900;i++){g.fillStyle=`rgba(${gameRandom()<.5?'8,9,5':'165,144,96'},${gameRandom()*.16})`;g.fillRect(gameRandom()*n,y+gameRandom()*75,1+gameRandom()*8,1+gameRandom()*11)}}for(let i=0;i<55;i++){g.fillStyle=`rgba(48,69,36,${.12+gameRandom()*.19})`;g.beginPath();g.ellipse(gameRandom()*n,gameRandom()*n,15+gameRandom()*70,4+gameRandom()*18,gameRandom(),0,6.28);g.fill()}const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t}
-const groundTex=noiseTexture('#414333'),barkTex=noiseTexture('#493b2b',true);groundTex.repeat.set(mazeN/2,mazeN/2);barkTex.repeat.set(1,1);
-const floorMat=new THREE.MeshStandardMaterial({color:0x8c8b70,map:groundTex,bumpMap:groundTex,bumpScale:.045,roughness:1,metalness:0});const wallTex=wallTexture();wallTex.repeat.set(2,1.5);const wallMat=new THREE.MeshStandardMaterial({color:0xc1b18f,map:wallTex,bumpMap:wallTex,bumpScale:.16,roughness:1,metalness:0});const barkMat=new THREE.MeshStandardMaterial({color:0xc0a989,map:barkTex,bumpMap:barkTex,bumpScale:.16,roughness:1,metalness:0});const leafMats=[0x203322,0x2c3e28,0x39432a,0x263725,0x465033].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:1,metalness:0}));
+// Keep the original random sequence before maze generation. Lanterns and wall photos depend on it.
+noiseTexture('#414333').dispose();
+const barkTex = noiseTexture('#493b2b', true);
+wallTexture().dispose();
+
+function castleStoneTexture(isFloor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = isFloor ? 512 : 1024;
+  const ctx = canvas.getContext('2d');
+  let seed = isFloor ? 1047 : 1963;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  ctx.fillStyle = isFloor ? '#302a30' : '#30282b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const columns = 4;
+  const rows = isFloor ? 4 : 14;
+  const blockWidth = canvas.width / columns, blockHeight = canvas.height / rows;
+  const grout = isFloor ? 3 : 4;
+  for (let row = 0; row < rows; row++) {
+    const y = row * blockHeight + grout;
+    const stagger = !isFloor && row % 2 ? blockWidth / 2 : 0;
+    for (let col = 0; col < columns; col++) {
+      const x = col * blockWidth + stagger + grout;
+      const width = blockWidth - grout * 2, height = blockHeight - grout * 2;
+      const hue = isFloor ? 16 + random() * 17 : 16 + random() * 12;
+      const saturation = 9 + random() * 8, light = (isFloor ? 33 : 31) + random() * 12;
+      for (const left of [x - canvas.width, x]) {
+        if (left + width <= 0 || left >= canvas.width) continue;
+        const stone = ctx.createLinearGradient(left, y, left + width * .32, y + height);
+        stone.addColorStop(0, 'hsl(' + hue + ',' + saturation + '%,' + (light + 9) + '%)');
+        stone.addColorStop(.32, 'hsl(' + hue + ',' + saturation + '%,' + light + '%)');
+        stone.addColorStop(1, 'hsl(' + hue + ',' + saturation + '%,' + (light - 7) + '%)');
+        ctx.fillStyle = stone;
+        ctx.fillRect(left, y, width, height);
+        ctx.fillStyle = '#c4a58a35';
+        ctx.fillRect(left + 2, y, width - 4, 2);
+        ctx.fillStyle = '#1c141752';
+        ctx.fillRect(left, y + height - 2, width, 2);
+      }
+    }
+  }
+  for (let i = 0; i < 12500; i++) {
+    const x = random() * canvas.width, y = random() * canvas.height;
+    ctx.fillStyle = random() < .5 ? '#d6b69b18' : '#211b2624';
+    ctx.fillRect(x, y, 1 + random() * 5, 1 + random() * 3);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+const wallTex = castleStoneTexture(false);
+const floorTex = castleStoneTexture(true);
+floorTex.repeat.set(mazeN / 1.35, mazeN / 1.35);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0xe2d8d4, map: floorTex, bumpMap: floorTex, bumpScale: .04, roughness: .52
+});
+const wallMat = new THREE.MeshStandardMaterial({
+  color: 0xe5d6cc, map: wallTex, bumpMap: wallTex, bumpScale: .075, roughness: .9
+});
 const grid=Array.from({length:mazeN},()=>Array(mazeN).fill(1));function carve(x,y){grid[y][x]=0;let ds=[[0,-2],[2,0],[0,2],[-2,0]];for(let i=ds.length-1;i>0;i--){let j=Math.floor(gameRandom()*(i+1));[ds[i],ds[j]]=[ds[j],ds[i]]}for(const [dx,dy]of ds){let nx=x+dx,ny=y+dy;if(nx>0&&ny>0&&nx<mazeN-1&&ny<mazeN-1&&grid[ny][nx]){grid[y+dy/2][x+dx/2]=0;carve(nx,ny)}}}carve(1,1);grid[1][1]=0;grid[mazeN-2][mazeN-2]=0;
 // extra loops keep navigation readable while preserving a demanding route
 for(let k=0;k<260;k++){let x=1+Math.floor(gameRandom()*(mazeN-2)),y=1+Math.floor(gameRandom()*(mazeN-2));if(grid[y][x]&&gameRandom()<.45)grid[y][x]=0}
@@ -83,14 +147,64 @@ for(const [rx,ry] of mazeClearings){for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1
 grid[3][6] = 1;
 const spawnDirs=[[1,0],[-1,0],[0,1],[0,-1]],lampDistanceMaps=runeCells.map(([sx,sy])=>{const dist=Array.from({length:mazeN},()=>Array(mazeN).fill(-1)),q=[[sx,sy]];dist[sy][sx]=0;for(let qi=0;qi<q.length;qi++){const [x,y]=q[qi];for(const [dx,dy] of spawnDirs){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<mazeN&&ny<mazeN&&!grid[ny][nx]&&dist[ny][nx]<0){dist[ny][nx]=dist[y][x]+1;q.push([nx,ny])}}}return dist});const spawnCell={x:9,y:9},spawnDistances=lampDistanceMaps.map(d=>d[spawnCell.y][spawnCell.x]),spawnEuclidean=runeCells.map(([x,y])=>Math.hypot(x-spawnCell.x,y-spawnCell.y)),nearestLampIndex=spawnEuclidean.indexOf(Math.min(...spawnEuclidean)),spawnExits=spawnDirs.map(([dx,dy])=>({x:spawnCell.x+dx,y:spawnCell.y+dy})).filter(p=>p.x>=0&&p.y>=0&&p.x<mazeN&&p.y<mazeN&&!grid[p.y][p.x]),spawnNext=spawnExits.reduce((best,p)=>lampDistanceMaps[nearestLampIndex][p.y][p.x]<lampDistanceMaps[nearestLampIndex][best.y][best.x]?p:best,spawnExits[0]||spawnCell),spawnYaw=Math.atan2(-(spawnNext.x-spawnCell.x),-(spawnNext.y-spawnCell.y));
 const origin=-(mazeN*cell)/2;const pos=(x,y)=>new THREE.Vector3(origin+x*cell,0,origin+y*cell);const floor=new THREE.Mesh(new THREE.PlaneGeometry(mazeN*cell,mazeN*cell),floorMat);floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;scene.add(floor);
-const wallHeight=6.2,wallGeo=new THREE.BoxGeometry(cell,wallHeight,cell),supportGeo=new THREE.BoxGeometry(.24,wallHeight,.3),supportMat=new THREE.MeshStandardMaterial({color:0x756044,map:barkTex,roughness:.98}),supports=[];for(let y=0;y<mazeN;y++)for(let x=0;x<mazeN;x++)if(grid[y][x]){let wx=origin+x*cell,wz=origin+y*cell,m=new THREE.Mesh(wallGeo,wallMat);m.position.set(wx,wallHeight/2-.12,wz);m.receiveShadow=true;m.castShadow=true;scene.add(m);let cap=new THREE.Mesh(new THREE.BoxGeometry(cell+.08,.24,cell+.08),supportMat);cap.position.set(wx,wallHeight-.12,wz);cap.castShadow=true;scene.add(cap);for(let side of [-1,1]){let post=new THREE.Mesh(supportGeo,supportMat);post.position.set(wx,wallHeight/2-.12,wz+side*(cell/2-.13));post.castShadow=true;post.receiveShadow=true;scene.add(post)}}
+
+// Trace the open corridors on a separate floor surface for the gold-edged red runner.
+function addCastleRunner() {
+  const carpet = document.createElement('canvas');
+  carpet.width = carpet.height = 2048;
+  const ctx = carpet.getContext('2d');
+  const pitch = carpet.width / mazeN;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let y = 1; y < mazeN - 1; y++) {
+    for (let x = 1; x < mazeN - 1; x++) {
+      if (grid[y][x]) continue;
+      for (const [dx, dy] of [[1, 0], [0, 1]]) {
+        if (grid[y + dy][x + dx]) continue;
+        ctx.moveTo(x * pitch, y * pitch);
+        ctx.lineTo((x + dx) * pitch, (y + dy) * pitch);
+      }
+    }
+  }
+  for (const [width, color] of [[.48, '#3a191f'], [.453, '#a76e32'], [.421, '#681b26'],
+                               [.386, '#c18a45'], [.351, '#741b2e']]) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width * pitch;
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-atop';
+  let seed = 621;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let i = 0; i < 14500; i++) {
+    ctx.fillStyle = i % 2 ? '#f0a14d1b' : '#30091c32';
+    ctx.fillRect(random() * carpet.width, random() * carpet.height, 1 + random() * 4, 1 + random() * 2);
+  }
+  const texture = new THREE.CanvasTexture(carpet);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  const runner = new THREE.Mesh(floor.geometry, new THREE.MeshStandardMaterial({
+    map: texture, alphaTest: .42, roughness: .97
+  }));
+  runner.rotation.x = floor.rotation.x;
+  runner.position.y = floor.position.y + .012;
+  runner.receiveShadow = true;
+  scene.add(runner);
+}
+addCastleRunner();
+const wallHeight=6.2,wallGeo=new THREE.BoxGeometry(cell,wallHeight,cell),supportGeo=new THREE.BoxGeometry(.24,wallHeight,.3),supportMat=new THREE.MeshStandardMaterial({color:0x9a8074,map:wallTex,roughness:.88}),supports=[];for(let y=0;y<mazeN;y++)for(let x=0;x<mazeN;x++)if(grid[y][x]){let wx=origin+x*cell,wz=origin+y*cell,m=new THREE.Mesh(wallGeo,wallMat);m.position.set(wx,wallHeight/2-.12,wz);m.receiveShadow=true;m.castShadow=true;scene.add(m);let cap=new THREE.Mesh(new THREE.BoxGeometry(cell+.08,.24,cell+.08),supportMat);cap.position.set(wx,wallHeight-.12,wz);cap.castShadow=true;scene.add(cap);for(let side of [-1,1]){let post=new THREE.Mesh(supportGeo,supportMat);post.position.set(wx,wallHeight/2-.12,wz+side*(cell/2-.13));post.castShadow=true;post.receiveShadow=true;scene.add(post)}}
 // trees along maze edges and in broad clearings
-const posterImagePaths=Array.from({length:14},(_,i)=>'./assets/nailong-'+String(i+1).padStart(2,'0')+'.jpg');const posterLoader=new THREE.TextureLoader(),posterTextures=posterImagePaths.map(path=>{const texture=posterLoader.load(path);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return texture});function posterShuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(gameRandom()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}const posterCopies=6,posterReserved=[[spawnCell.x,spawnCell.y],...mazeClearings],posterCandidates=[];for(let y=1;y<mazeN-1;y++)for(let x=1;x<mazeN-1;x++)if(grid[y][x]&&!posterReserved.some(([rx,ry])=>Math.hypot(x-rx,y-ry)<2.4)){const sides=[-1,1].filter(dx=>grid[y][x+dx]===0);if(sides.length)posterCandidates.push({x,y,dx:sides[(gameRandom()*sides.length)|0]})}const posterSites=[],posterUsed=new Set(),posterByImage=Array.from({length:posterTextures.length},()=>[]),posterMinDistance=(site,list)=>list.length?Math.sqrt(Math.min(...list.map(p=>(site.x-p.x)**2+(site.y-p.y)**2))):Infinity;for(let copy=0;copy<posterCopies;copy++)for(const imageIndex of posterShuffle(Array.from({length:posterTextures.length},(_,i)=>i))){let options=posterCandidates.filter(p=>!posterUsed.has(p.x+','+p.y));if(!options.length)break;const same=posterByImage[imageIndex],spaced=options.filter(p=>posterMinDistance(p,same)>=6),fallback=options.filter(p=>posterMinDistance(p,same)>=4);if(spaced.length)options=spaced;else if(fallback.length)options=fallback;const separated=options.filter(p=>posterSites.every(q=>Math.max(Math.abs(p.x-q.x),Math.abs(p.y-q.y))>=2));if(separated.length)options=separated;const globallySpaced=options.filter(p=>posterMinDistance(p,posterSites)>=2.4);if(globallySpaced.length)options=globallySpaced;let bestScore=-Infinity,best=[];for(const p of options){const score=posterMinDistance(p,posterSites)+posterMinDistance(p,same)*.24;if(score>bestScore+.001){bestScore=score;best=[p]}else if(Math.abs(score-bestScore)<.001)best.push(p)}const site=best[(gameRandom()*Math.min(5,best.length))|0];posterUsed.add(site.x+','+site.y);site.imageIndex=imageIndex;posterSites.push(site);same.push(site)}const posterClearances=posterSites.map(site=>({x:origin+site.x*cell+site.dx*(cell/2+.04),z:origin+site.y*cell,dx:site.dx}));for(const site of posterSites){const image=posterTextures[site.imageIndex],faceX=origin+site.x*cell+site.dx*(cell/2+.035),faceZ=origin+site.y*cell,photo=new THREE.Mesh(new THREE.PlaneGeometry(cell*.86,wallHeight*.84),new THREE.MeshStandardMaterial({map:image,emissive:0x302619,emissiveMap:image,emissiveIntensity:.26,roughness:.96,side:THREE.DoubleSide}));photo.position.set(faceX,wallHeight/2-.12,faceZ);photo.rotation.y=site.dx>0?Math.PI/2:-Math.PI/2;scene.add(photo)}function tree(x,z,s=1,visible=true){const group=new THREE.Group();group.position.set(x,0,z);group.scale.setScalar(s);const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.25,.52,6.4,12,5),barkMat);trunk.position.y=3.05;trunk.castShadow=true;group.add(trunk);for(let j=0;j<5;j++){let angle=j*1.256,root=new THREE.Mesh(new THREE.CylinderGeometry(.05,.22,1.55,7),barkMat);root.position.set(Math.cos(angle)*.35,.5,Math.sin(angle)*.35);root.rotation.z=Math.cos(angle)*.55;root.rotation.x=Math.sin(angle)*.55;group.add(root)}for(let i=0;i<5;i++){let a=i*1.23+.2,branch=new THREE.Mesh(new THREE.CylinderGeometry(.035,.13,2.4,7),barkMat);branch.position.set(Math.cos(a)*.85,2.9+i*.5,Math.sin(a)*.85);branch.rotation.z=Math.cos(a)*.72;branch.rotation.x=Math.sin(a)*.72;group.add(branch)}for(let i=0;i<15;i++){let a=i*2.4, y=3.4+(i%4)*.7, crown=new THREE.Mesh(new THREE.IcosahedronGeometry(1.35+(i%3)*.18,2),leafMats[(gameRandom()*leafMats.length)|0]);crown.position.set(Math.cos(a)*.67,y,Math.sin(a)*.67);crown.scale.set(1.12,.95,1.12);crown.rotation.set(gameRandom(),gameRandom()*3,gameRandom()*.4);crown.castShadow=false;group.add(crown)}for(let m=0;m<5;m++){let vine=new THREE.Mesh(new THREE.CylinderGeometry(.012,.024,1.4+gameRandom()*1.3,5),new THREE.MeshStandardMaterial({color:0x253322,roughness:1}));let a=m*1.256;vine.position.set(Math.cos(a)*1.05,4.5+gameRandom()*.7,Math.sin(a)*1.05);vine.rotation.z=Math.cos(a)*.16;vine.rotation.x=Math.sin(a)*.16;group.add(vine)}if(visible)scene.add(group)}
-const trees=[];for(let y=0;y<mazeN;y++)for(let x=0;x<mazeN;x++){if(!grid[y][x]&&gameRandom()<.38&&Math.hypot(x-spawnCell.x,y-spawnCell.y)>2.2&&!(x<4&&y<4)&&!(x>mazeN-5&&y>mazeN-5)&&!mazeClearings.some(([rx,ry])=>Math.hypot(x-rx,y-ry)<2.2)&&Math.hypot(x-14,y-8)>2.2){let tx=origin+x*cell+(gameRandom()-.5)*.6,tz=origin+y*cell+(gameRandom()-.5)*.6,blocked=posterClearances.some(p=>{const forward=(tx-p.x)*p.dx;return forward>-.2&&forward<9.5&&Math.abs(tz-p.z)<3.1});if(!blocked){const scale=.8+gameRandom()*.55;const nearFirstLamp = Math.hypot(x-firstLampCell[0],y-firstLampCell[1])<1.5;tree(tx,tz,scale,!nearFirstLamp);if(!nearFirstLamp)trees.push({x:tx,z:tz})}}}
-// A layered tree line beyond the maze boundary removes the boxed-in horizon.
-const farTrunkGeo=new THREE.CylinderGeometry(.28,.62,9,8),farCrownGeo=new THREE.IcosahedronGeometry(1,1),farPineGeo=new THREE.ConeGeometry(1,1,8,3),farMat=new THREE.MeshStandardMaterial({color:0x111a14,roughness:1}),farBroad=new THREE.InstancedMesh(farCrownGeo,farMat,96),farPines=new THREE.InstancedMesh(farPineGeo,farMat,96),farTrunks=new THREE.InstancedMesh(farTrunkGeo,barkMat,96),farObj=new THREE.Object3D();let farN=0;const edge=mazeN*cell/2;for(let k=0;k<24;k++){let t=-edge-18+k*5.2;for(const [x,z]of [[t,-edge-15],[t,edge+15],[-edge-15,t],[edge+15,t]]){let s=.8+gameRandom()*.75,h=8+gameRandom()*8;farObj.position.set(x,h*.48,z);farObj.rotation.set(0,gameRandom()*6.28,0);farObj.scale.set(s,h/9,s);farObj.updateMatrix();farTrunks.setMatrixAt(farN,farObj.matrix);farObj.scale.set(0,0,0);farObj.updateMatrix();farBroad.setMatrixAt(farN,farObj.matrix);farPines.setMatrixAt(farN,farObj.matrix);if(gameRandom()<.53){farObj.position.y=h+2;farObj.scale.set(2.4*s,2.1*s,2.4*s);farObj.updateMatrix();farBroad.setMatrixAt(farN,farObj.matrix)}else{farObj.position.y=h+1.6;farObj.scale.set(2.7*s,h*.62,2.7*s);farObj.updateMatrix();farPines.setMatrixAt(farN,farObj.matrix)}farN++}}farTrunks.count=farBroad.count=farPines.count=farN;farTrunks.castShadow=farBroad.castShadow=farPines.castShadow=false;scene.add(farTrunks,farBroad,farPines);
-// Ferns, fallen branches, stones and leaf litter give the forest floor scale and texture.
-const fernMat=new THREE.MeshStandardMaterial({color:0x3d5030,roughness:1}),rockMat=new THREE.MeshStandardMaterial({color:0x454536,roughness:1}),puddleMat=new THREE.MeshStandardMaterial({color:0x26392e,roughness:.19,metalness:.12});const fernBlade=new THREE.ConeGeometry(.12,1.05,6,2),fernInstances=new THREE.InstancedMesh(fernBlade,fernMat,11550),fernDummy=new THREE.Object3D();fernInstances.castShadow=false;fernInstances.receiveShadow=false;let fernIndex=0;for(let i=0;i<1650;i++){let x=origin+gameRandom()*mazeN*cell,z=origin+gameRandom()*mazeN*cell,gx=Math.round((x-origin)/cell),gy=Math.round((z-origin)/cell);if(grid[gy]?.[gx])continue;for(let q=0;q<7;q++){fernDummy.position.set(x+(gameRandom()-.5)*.48,.3,z+(gameRandom()-.5)*.48);fernDummy.rotation.set((gameRandom()-.5)*.6,(q/7)*6.28,(gameRandom()-.5)*1.5);let fs=.65+gameRandom()*.65;fernDummy.scale.set(fs,fs,fs);fernDummy.updateMatrix();fernInstances.setMatrixAt(fernIndex++,fernDummy.matrix)}if(i%6===0){let rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.22+gameRandom()*.2,0),rockMat);rock.position.set(x,.06,z);rock.scale.y=.55;rock.rotation.set(gameRandom(),gameRandom(),gameRandom());scene.add(rock)}if(i%23===0){let water=new THREE.Mesh(new THREE.CircleGeometry(.55+gameRandom()*.8,16),puddleMat);water.rotation.x=-Math.PI/2;water.position.set(x,-.055,z);water.scale.y=.5;scene.add(water)}}fernInstances.count=fernIndex;fernInstances.instanceMatrix.needsUpdate=true;scene.add(fernInstances);// Hanging mist banks sit low between the trunks; layered translucent cones suggest broken moon shafts.
+const posterImagePaths=Array.from({length:14},(_,i)=>'./assets/nailong-'+String(i+1).padStart(2,'0')+'.jpg');const posterLoader=new THREE.TextureLoader(),posterTextures=posterImagePaths.map(path=>{const texture=posterLoader.load(path);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return texture});function posterShuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(gameRandom()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}const posterCopies=6,posterReserved=[[spawnCell.x,spawnCell.y],...mazeClearings],posterCandidates=[];for(let y=1;y<mazeN-1;y++)for(let x=1;x<mazeN-1;x++)if(grid[y][x]&&!posterReserved.some(([rx,ry])=>Math.hypot(x-rx,y-ry)<2.4)){const sides=[-1,1].filter(dx=>grid[y][x+dx]===0);if(sides.length)posterCandidates.push({x,y,dx:sides[(gameRandom()*sides.length)|0]})}const posterSites=[],posterUsed=new Set(),posterByImage=Array.from({length:posterTextures.length},()=>[]),posterMinDistance=(site,list)=>list.length?Math.sqrt(Math.min(...list.map(p=>(site.x-p.x)**2+(site.y-p.y)**2))):Infinity;for(let copy=0;copy<posterCopies;copy++)for(const imageIndex of posterShuffle(Array.from({length:posterTextures.length},(_,i)=>i))){let options=posterCandidates.filter(p=>!posterUsed.has(p.x+','+p.y));if(!options.length)break;const same=posterByImage[imageIndex],spaced=options.filter(p=>posterMinDistance(p,same)>=6),fallback=options.filter(p=>posterMinDistance(p,same)>=4);if(spaced.length)options=spaced;else if(fallback.length)options=fallback;const separated=options.filter(p=>posterSites.every(q=>Math.max(Math.abs(p.x-q.x),Math.abs(p.y-q.y))>=2));if(separated.length)options=separated;const globallySpaced=options.filter(p=>posterMinDistance(p,posterSites)>=2.4);if(globallySpaced.length)options=globallySpaced;let bestScore=-Infinity,best=[];for(const p of options){const score=posterMinDistance(p,posterSites)+posterMinDistance(p,same)*.24;if(score>bestScore+.001){bestScore=score;best=[p]}else if(Math.abs(score-bestScore)<.001)best.push(p)}const site=best[(gameRandom()*Math.min(5,best.length))|0];posterUsed.add(site.x+','+site.y);site.imageIndex=imageIndex;posterSites.push(site);same.push(site)}const posterClearances=posterSites.map(site=>({x:origin+site.x*cell+site.dx*(cell/2+.04),z:origin+site.y*cell,dx:site.dx}));for(const site of posterSites){const image=posterTextures[site.imageIndex],faceX=origin+site.x*cell+site.dx*(cell/2+.035),faceZ=origin+site.y*cell,photo=new THREE.Mesh(new THREE.PlaneGeometry(cell*.86,wallHeight*.84),new THREE.MeshStandardMaterial({map:image,emissive:0x302619,emissiveMap:image,emissiveIntensity:.26,roughness:.96,side:THREE.DoubleSide}));photo.position.set(faceX,wallHeight/2-.12,faceZ);photo.rotation.y=site.dx>0?Math.PI/2:-Math.PI/2;scene.add(photo)}
+// Retain the old vegetation random draws so existing stones, puddles and other details keep their layout.
+function advanceSceneryRandom(draws) {
+  for (let i = 0; i < draws; i++) gameRandom();
+}
+for(let y=0;y<mazeN;y++)for(let x=0;x<mazeN;x++){if(!grid[y][x]&&gameRandom()<.38&&Math.hypot(x-spawnCell.x,y-spawnCell.y)>2.2&&!(x<4&&y<4)&&!(x>mazeN-5&&y>mazeN-5)&&!mazeClearings.some(([rx,ry])=>Math.hypot(x-rx,y-ry)<2.2)&&Math.hypot(x-14,y-8)>2.2){let tx=origin+x*cell+(gameRandom()-.5)*.6,tz=origin+y*cell+(gameRandom()-.5)*.6,blocked=posterClearances.some(p=>{const forward=(tx-p.x)*p.dx;return forward>-.2&&forward<9.5&&Math.abs(tz-p.z)<3.1});if(!blocked){advanceSceneryRandom(71);}}}
+advanceSceneryRandom(96 * 4);
+const rockMat=new THREE.MeshStandardMaterial({color:0x454536,roughness:1}),puddleMat=new THREE.MeshStandardMaterial({color:0x26392e,roughness:.19,metalness:.12});for(let i=0;i<1650;i++){let x=origin+gameRandom()*mazeN*cell,z=origin+gameRandom()*mazeN*cell,gx=Math.round((x-origin)/cell),gy=Math.round((z-origin)/cell);if(grid[gy]?.[gx])continue;advanceSceneryRandom(7 * 5);if(i%6===0){let rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.22+gameRandom()*.2,0),rockMat);rock.position.set(x,.06,z);rock.scale.y=.55;rock.rotation.set(gameRandom(),gameRandom(),gameRandom());scene.add(rock)}if(i%23===0){let water=new THREE.Mesh(new THREE.CircleGeometry(.55+gameRandom()*.8,16),puddleMat);water.rotation.x=-Math.PI/2;water.position.set(x,-.055,z);water.scale.y=.5;scene.add(water)}}// Hanging mist banks sit low between the trunks; layered translucent cones suggest broken moon shafts.
 // Fog remains in the world atmosphere; local transparent fog volumes were removed
 // because their layered edges created pale halos around nearby silhouettes.
 // landmarks and collectibles
@@ -169,10 +283,6 @@ function canMove(x, z) {
       if (grid[y][col] && Math.abs(origin + col * cell - x) < 1.38 &&
           Math.abs(origin + y * cell - z) < 1.38) return false;
     }
-  }
-  for (const tree of trees) {
-    const dx = tree.x - x, dz = tree.z - z;
-    if (dx * dx + dz * dz < .68 ** 2) return false;
   }
   return true;
 }
