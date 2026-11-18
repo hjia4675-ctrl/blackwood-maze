@@ -232,6 +232,73 @@ for(const [rx,ry] of mazeClearings){for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1
 // Close the shortcut after clearing the former lantern site.
 grid[3][6] = 1;
 const spawnDirs=[[1,0],[-1,0],[0,1],[0,-1]],lampDistanceMaps=runeCells.map(([sx,sy])=>{const dist=Array.from({length:mazeN},()=>Array(mazeN).fill(-1)),q=[[sx,sy]];dist[sy][sx]=0;for(let qi=0;qi<q.length;qi++){const [x,y]=q[qi];for(const [dx,dy] of spawnDirs){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<mazeN&&ny<mazeN&&!grid[ny][nx]&&dist[ny][nx]<0){dist[ny][nx]=dist[y][x]+1;q.push([nx,ny])}}}return dist});const spawnCell={x:9,y:9},spawnDistances=lampDistanceMaps.map(d=>d[spawnCell.y][spawnCell.x]),spawnEuclidean=runeCells.map(([x,y])=>Math.hypot(x-spawnCell.x,y-spawnCell.y)),nearestLampIndex=spawnEuclidean.indexOf(Math.min(...spawnEuclidean)),spawnExits=spawnDirs.map(([dx,dy])=>({x:spawnCell.x+dx,y:spawnCell.y+dy})).filter(p=>p.x>=0&&p.y>=0&&p.x<mazeN&&p.y<mazeN&&!grid[p.y][p.x]),spawnNext=spawnExits.reduce((best,p)=>lampDistanceMaps[nearestLampIndex][p.y][p.x]<lampDistanceMaps[nearestLampIndex][best.y][best.x]?p:best,spawnExits[0]||spawnCell),spawnYaw=Math.atan2(-(spawnNext.x-spawnCell.x),-(spawnNext.y-spawnCell.y));
+// Project the supplied sunset onto a camera-centered sky dome.
+function addSunsetSky(yaw) {
+  const uniforms = {
+    sunsetPhoto: {value: null},
+    photoReady: {value: 0},
+    sunsetBearing: {value: yaw}
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    side: THREE.BackSide,
+    depthTest: false,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+    vertexShader: [
+      'varying vec3 skyDirection;',
+      'void main() {',
+      '  skyDirection = position;',
+      '  vec4 clip = projectionMatrix * viewMatrix * vec4(position + cameraPosition, 1.0);',
+      '  gl_Position = clip.xyww;',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'uniform sampler2D sunsetPhoto;',
+      'uniform float photoReady;',
+      'uniform float sunsetBearing;',
+      'varying vec3 skyDirection;',
+      'void main() {',
+      '  vec3 dir = normalize(skyDirection);',
+      '  vec3 west = vec3(-sin(sunsetBearing), 0.0, -cos(sunsetBearing));',
+      '  vec3 alongHorizon = vec3(cos(sunsetBearing), 0.0, -sin(sunsetBearing));',
+      '  float elevation = asin(clamp(dir.y, -1.0, 1.0));',
+      '  float azimuth = atan(dot(dir, alongHorizon), dot(dir, west));',
+      '  float rear = smoothstep(0.0, 0.95, -cos(azimuth));',
+      '  float u = 0.5 + sin(azimuth) * 0.485;',
+      '  float v = 0.055 + elevation * 0.89 + rear * 0.27;',
+      '  vec3 horizon = mix(vec3(0.94, 0.39, 0.20), vec3(0.46, 0.26, 0.35), rear);',
+      '  vec3 zenith = vec3(0.26, 0.22, 0.33);',
+      '  vec3 sky = mix(horizon, zenith, smoothstep(0.0, 1.45, elevation));',
+      '  if (photoReady > 0.5) {',
+      '    vec3 clouds = texture2D(sunsetPhoto, vec2(u, clamp(v, 0.002, 0.998))).rgb;',
+      '    clouds *= mix(vec3(1.0), vec3(0.84, 0.85, 0.94), rear * 0.35);',
+      '    float photograph = smoothstep(-0.38, -0.01, elevation) * (1.0 - smoothstep(0.89, 1.13, v));',
+      '    sky = mix(sky, clouds, photograph);',
+      '  }',
+      '  sky *= mix(0.36, 1.0, smoothstep(-0.65, 0.025, elevation));',
+      '  gl_FragColor = vec4(sky, 1.0);',
+      '}'
+    ].join('\n')
+  });
+
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(32, 48, 32), material);
+  sky.name = 'Castle sunset sky';
+  sky.frustumCulled = false;
+  sky.renderOrder = -1000;
+  scene.add(sky);
+
+  new THREE.TextureLoader().load('./assets/sunset-sky.jpg', texture => {
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    uniforms.sunsetPhoto.value = texture;
+    uniforms.photoReady.value = 1;
+  });
+}
+
+addSunsetSky(spawnYaw);
 const origin=-(mazeN*cell)/2;const pos=(x,y)=>new THREE.Vector3(origin+x*cell,0,origin+y*cell);const floor=new THREE.Mesh(new THREE.PlaneGeometry(mazeN*cell,mazeN*cell),floorMat);floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;scene.add(floor);
 
 // Trace the open corridors on a separate floor surface for the gold-edged red runner.
@@ -540,3 +607,4 @@ function frame(now){requestAnimationFrame(frame);let dt=Math.min(.05,(now-last)/
 if(cheatGuide&&now-routeClock>100){routeClock=now;updateCheatRoute()}if(now-guideClock>1100){guideClock=now;let targets=got<3?shards.filter(o=>!o.got):[bell];if(targets.length){let t=targets.reduce((a,b)=>Math.hypot(camera.position.x-a.x,camera.position.z-a.z)<Math.hypot(camera.position.x-b.x,camera.position.z-b.z)?a:b),steps=mazeRouteSteps(t.x,t.z),dx=t.x-camera.position.x,dz=t.z-camera.position.z,forward=-dx*Math.sin(yaw)-dz*Math.cos(yaw),right=dx*Math.cos(yaw)-dz*Math.sin(yaw),ang=Math.atan2(right,forward),dirs=['前方','右前方','右方','右后方','后方','左后方','左方','左前方'],dir=dirs[(Math.round(ang/(Math.PI/4))+8)%8],dist=Math.round(steps>0?steps*cell:Math.hypot(dx,dz));document.getElementById('goal').textContent=got<3?'路标 '+got+'/3 · '+dir+'约 '+dist+' 米':'旧钟 · '+dir+'约 '+dist+' 米'}}if(light<2){flame.intensity=.015;ambient.intensity=.76;moon.intensity=.64}}
 if(messageTimer>0){messageTimer-=dt;if(messageTimer<=0)document.getElementById('toast').style.opacity=0}renderer.render(scene,camera)}requestAnimationFrame(frame);
 </script></body></html>
+
